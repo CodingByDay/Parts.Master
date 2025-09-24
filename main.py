@@ -7,7 +7,7 @@ import locale
 
 structured_path = None
 
-# Try Croatian locale for month names in date/time
+# Croatian date/time if available
 try:
     locale.setlocale(locale.LC_TIME, "hr_HR.utf8")
 except:
@@ -57,8 +57,28 @@ def write_section(writer, title: str, table: pd.DataFrame, row_pos: int, cols: l
         table[cols].to_excel(writer, index=False, startrow=row_pos)
         row_pos += len(table) + 3
     else:
-        row_pos += 1
+        pd.DataFrame([["(no rows)"]]).to_excel(writer, index=False, header=False, startrow=row_pos)
+        row_pos += 3
     return row_pos
+
+
+def normalize_str(x):
+    s = "" if pd.isna(x) else str(x)
+    return s.strip()
+
+
+def fmt_revision(x):
+    if pd.isna(x):
+        return ""
+    s = str(x).strip()
+    # convert floats like "1.0" -> "1"
+    try:
+        f = float(s)
+        if f.is_integer():
+            return str(int(f))
+    except:
+        pass
+    return s
 
 
 def process_file():
@@ -82,13 +102,19 @@ def process_file():
         }
         df = df.rename(columns=col_mapping)
 
-        # Ensure required cols exist and set types
-        req_cols = ["Quantity","Part Number","Type","Nomenclature","Revision","Product Description"]
+        # Ensure required columns exist and normalize types
+        req_cols = ["Quantity", "Part Number", "Type", "Nomenclature", "Revision", "Product Description"]
         for c in req_cols:
             if c not in df.columns:
                 df[c] = ""
+
         df["Quantity"] = pd.to_numeric(df["Quantity"], errors="coerce").fillna(0)
         df["Type"] = df["Type"].astype(str).str.strip()
+
+        # Normalize meta columns for consistent merging later
+        df["Part Number"] = df["Part Number"].map(normalize_str)
+        df["Revision"] = df["Revision"].map(fmt_revision)
+        df["Product Description"] = df["Product Description"].map(normalize_str)
 
         # Top-level rows (Item with no dot)
         df_parents = df[df["Item"].str.match(r"^\d+$")].copy()
@@ -144,10 +170,12 @@ def process_file():
             # Map Item -> Quantity (sum if duplicates)
             qty_by_item = df.groupby("Item")["Quantity"].sum().to_dict()
 
-            # Robust leaf detection: an item is a parent if ANY other item starts with "<item>."
+            # Parent detection: any other item starting with "<item>."
             items_list = df["Item"].dropna().astype(str).tolist()
-            is_parent_map = {itm: any(other.startswith(itm + ".") for other in items_list if other != itm)
-                             for itm in items_list}
+            is_parent_map = {
+                itm: any(other.startswith(itm + ".") for other in items_list if other != itm)
+                for itm in items_list
+            }
             leaf_mask = df["Item"].map(lambda x: not is_parent_map.get(x, False))
 
             # Leaf PART rows only
@@ -155,21 +183,22 @@ def process_file():
 
             def ancestors(itm: str):
                 segs = itm.split(".")
-                # prefixes from deepest-1 up to root, e.g. "4.3.1" -> ["4.3", "4"]
                 return [".".join(segs[:i]) for i in range(len(segs)-1, 0, -1)]
 
-            # Non-exploded leaf total (for comparison/debug)
-            leaf_raw_total = float(leaf_parts["Quantity"].sum())
-
-            # Exploded total = sum(leaf_qty * product(ancestor_qty))
+            # Exploded total and per-PN contributions
             exploded_total = 0.0
+            per_pn_qty = {}
+
             for _, row in leaf_parts.iterrows():
                 itm = str(row["Item"])
+                pn = row["Part Number"]  # already normalized
                 q = float(row["Quantity"])
                 mult = 1.0
                 for anc in ancestors(itm):
                     mult *= float(qty_by_item.get(anc, 1))
-                exploded_total += q * mult
+                contrib = q * mult
+                exploded_total += contrib
+                per_pn_qty[pn] = per_pn_qty.get(pn, 0.0) + contrib
 
             total_parts = int(round(exploded_total))
 
@@ -177,8 +206,40 @@ def process_file():
             pd.DataFrame([["Recapitulation"]]).to_excel(writer, index=False, header=False, startrow=r); r += 2
             pd.DataFrame([
                 ["Different parts:", different_parts],
-                ["Total parts:", total_parts],          # <- exploded
-            ]).to_excel(writer, index=False, header=False, startrow=r); r += 4
+                ["Total parts:", total_parts],
+            ]).to_excel(writer, index=False, header=False, startrow=r); r += 3
+
+            # ===== Different parts list (exploded) =====
+            # Build best-available metadata per PN (prefer non-empty description/revision)
+            meta_parts = df[df["Type"].str.lower() == "part"][["Part Number", "Revision", "Product Description"]].copy()
+            # Flags for non-empty
+            meta_parts["_desc_ok"] = meta_parts["Product Description"].str.strip().ne("")
+            meta_parts["_rev_ok"] = meta_parts["Revision"].str.strip().ne("")
+            # Sort to prefer rows with non-empty description, then non-empty revision
+            meta_parts.sort_values(by=["_desc_ok", "_rev_ok"], ascending=[False, False], inplace=True)
+            meta = meta_parts.groupby("Part Number", as_index=False).first()[["Part Number", "Revision", "Product Description"]]
+
+            parts_list = pd.DataFrame(
+                [{"Part Number": pn, "Quantity": int(round(qty))} for pn, qty in per_pn_qty.items()]
+            )
+            pd.DataFrame([["Different parts (exploded quantities)"]]).to_excel(
+                writer, index=False, header=False, startrow=r
+            ); r += 2
+
+            if parts_list.empty:
+                pd.DataFrame([["(no parts found)"]]).to_excel(writer, index=False, header=False, startrow=r)
+                r += 2
+            else:
+                # Ensure same dtype/format for merge keys
+                parts_list["Part Number"] = parts_list["Part Number"].map(normalize_str)
+                meta["Part Number"] = meta["Part Number"].map(normalize_str)
+
+                parts_list = parts_list.merge(meta, on="Part Number", how="left")
+                parts_list = parts_list[["Quantity", "Part Number", "Revision", "Product Description"]]
+                parts_list.sort_values(by="Part Number", inplace=True, key=lambda c: c.astype(str))
+
+                parts_list.to_excel(writer, index=False, startrow=r)
+                r += len(parts_list) + 3
 
         messagebox.showinfo("Success", f"File saved (overwritten if existed):\n{out_path}")
 
@@ -189,7 +250,7 @@ def process_file():
 # --- Tkinter GUI ---
 root = tk.Tk()
 root.title("Structured Excel Processor")
-root.geometry("560x340")
+root.geometry("600x420")
 
 tk.Label(root, text="Upload '10011 structured.xlsx' to generate 'output/10011.xlsx'").pack(pady=10)
 tk.Button(root, text="Upload Structured File", command=upload_structured).pack(pady=5)
