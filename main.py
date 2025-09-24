@@ -7,10 +7,10 @@ import locale
 
 structured_path = None
 
-# Croatian date/time if available
+# Try Croatian locale for month names in date/time
 try:
     locale.setlocale(locale.LC_TIME, "hr_HR.utf8")
-except:
+except Exception:
     pass  # fallback to system locale
 
 
@@ -49,19 +49,6 @@ def get_direct_children(df: pd.DataFrame, parent_item: str) -> pd.DataFrame:
     return children
 
 
-def write_section(writer, title: str, table: pd.DataFrame, row_pos: int, cols: list) -> int:
-    """Write a section title and a table; return new row position."""
-    pd.DataFrame([[title]]).to_excel(writer, index=False, header=False, startrow=row_pos)
-    row_pos += 2
-    if not table.empty:
-        table[cols].to_excel(writer, index=False, startrow=row_pos)
-        row_pos += len(table) + 3
-    else:
-        pd.DataFrame([["(no rows)"]]).to_excel(writer, index=False, header=False, startrow=row_pos)
-        row_pos += 3
-    return row_pos
-
-
 def normalize_str(x):
     s = "" if pd.isna(x) else str(x)
     return s.strip()
@@ -76,9 +63,29 @@ def fmt_revision(x):
         f = float(s)
         if f.is_integer():
             return str(int(f))
-    except:
+    except Exception:
         pass
     return s
+
+
+def best_title_from_filename(path: str) -> str:
+    """Derive a friendly BOM title from the file name."""
+    stem = os.path.splitext(os.path.basename(path))[0]
+    stem = stem.replace("structured", "").replace("Structured", "").strip("- _")
+    return stem or "BOM"
+
+
+def write_section(writer, title: str, table: pd.DataFrame, row_pos: int, cols: list) -> int:
+    """Write a section title and a table; return new row position."""
+    pd.DataFrame([[title]]).to_excel(writer, index=False, header=False, startrow=row_pos)
+    row_pos += 2
+    if not table.empty:
+        table[cols].to_excel(writer, index=False, startrow=row_pos)
+        row_pos += len(table) + 3
+    else:
+        pd.DataFrame([["(no rows)"]]).to_excel(writer, index=False, header=False, startrow=row_pos)
+        row_pos += 3
+    return row_pos
 
 
 def process_file():
@@ -111,7 +118,7 @@ def process_file():
         df["Quantity"] = pd.to_numeric(df["Quantity"], errors="coerce").fillna(0)
         df["Type"] = df["Type"].astype(str).str.strip()
 
-        # Normalize meta columns for consistent merging later
+        # Normalize for consistent joins
         df["Part Number"] = df["Part Number"].map(normalize_str)
         df["Revision"] = df["Revision"].map(fmt_revision)
         df["Product Description"] = df["Product Description"].map(normalize_str)
@@ -121,7 +128,7 @@ def process_file():
         if not df_parents.empty:
             df_parents.sort_values(by="Item", key=lambda c: c.map(item_key), inplace=True)
 
-        # Output path
+        # Output path (overwrite if exists)
         base_dir = os.path.dirname(os.path.abspath(__file__))
         out_dir = os.path.join(base_dir, "output")
         os.makedirs(out_dir, exist_ok=True)
@@ -130,13 +137,16 @@ def process_file():
         with pd.ExcelWriter(out_path, engine="openpyxl", mode="w") as writer:
             r = 0
 
-            # Header (Croatian if available)
+            # Header (Croatian, with seconds)
             now = datetime.now()
-            cro_dt = now.strftime("%d. %B %Y. %H:%M")
+            cro_dt = now.strftime("%d. %B %Y. %H:%M:%S")
             pd.DataFrame([[cro_dt]]).to_excel(writer, index=False, header=False, startrow=r); r += 2
 
-            # Title
-            pd.DataFrame([["Bill Of Materials"]]).to_excel(writer, index=False, header=False, startrow=r); r += 2
+            # Main title (Bill of Material + best guess from filename)
+            bom_title = best_title_from_filename(structured_path)
+            pd.DataFrame([[f"Bill of Material: {bom_title}"]]).to_excel(
+                writer, index=False, header=False, startrow=r
+            ); r += 2
 
             # Main parent table
             if not df_parents.empty:
@@ -145,7 +155,7 @@ def process_file():
             else:
                 pd.DataFrame([["(No top-level items found)"]]).to_excel(writer, index=False, header=False, startrow=r); r += 3
 
-            # ===== Breadth-first BOM sections =====
+            # ===== Breadth-first BOM sections (only direct children) =====
             level = [(str(row["Item"]), row["Part Number"])
                      for _, row in df_parents.iterrows()
                      if str(row["Type"]).lower() == "assembly"]
@@ -154,7 +164,7 @@ def process_file():
                 next_level = []
                 for parent_item, pn in level:
                     children = get_direct_children(df, parent_item)
-                    r = write_section(writer, f"Bill Of Materials : {pn}", children, r, req_cols)
+                    r = write_section(writer, f"Bill of Material: {pn}", children, r, req_cols)
                     if not children.empty:
                         asm_children = children[children["Type"].str.lower() == "assembly"]
                         for _, c in asm_children.iterrows():
@@ -162,15 +172,15 @@ def process_file():
                 next_level.sort(key=lambda t: item_key(t[0]))
                 level = next_level
 
-            # ===== Recapitulation =====
-            # Different parts (unique PN over all Part rows)
-            parts = df[df["Type"].str.lower() == "part"].copy()
-            different_parts = int(parts["Part Number"].nunique())
+            # ===== Recapitulation & exploded counts =====
+            # Different parts = unique PN among PART rows
+            parts_only = df[df["Type"].str.lower() == "part"].copy()
+            different_parts = int(parts_only["Part Number"].nunique())
 
-            # Map Item -> Quantity (sum if duplicates)
+            # Quantities per Item
             qty_by_item = df.groupby("Item")["Quantity"].sum().to_dict()
 
-            # Parent detection: any other item starting with "<item>."
+            # Identify parent vs leaf items
             items_list = df["Item"].dropna().astype(str).tolist()
             is_parent_map = {
                 itm: any(other.startswith(itm + ".") for other in items_list if other != itm)
@@ -185,13 +195,13 @@ def process_file():
                 segs = itm.split(".")
                 return [".".join(segs[:i]) for i in range(len(segs)-1, 0, -1)]
 
-            # Exploded total and per-PN contributions
+            # Exploded total & per-PN aggregations
             exploded_total = 0.0
             per_pn_qty = {}
 
             for _, row in leaf_parts.iterrows():
                 itm = str(row["Item"])
-                pn = row["Part Number"]  # already normalized
+                pn = row["Part Number"]
                 q = float(row["Quantity"])
                 mult = 1.0
                 for anc in ancestors(itm):
@@ -202,44 +212,74 @@ def process_file():
 
             total_parts = int(round(exploded_total))
 
+            # ==== Recapitulation header ====
             r += 1
-            pd.DataFrame([["Recapitulation"]]).to_excel(writer, index=False, header=False, startrow=r); r += 2
+            pd.DataFrame([[f"Recapitulation of: {bom_title}"]]).to_excel(
+                writer, index=False, header=False, startrow=r
+            ); r += 2
             pd.DataFrame([
                 ["Different parts:", different_parts],
                 ["Total parts:", total_parts],
             ]).to_excel(writer, index=False, header=False, startrow=r); r += 3
 
-            # ===== Different parts list (exploded) =====
-            # Build best-available metadata per PN (prefer non-empty description/revision)
-            meta_parts = df[df["Type"].str.lower() == "part"][["Part Number", "Revision", "Product Description"]].copy()
-            # Flags for non-empty
+            # ===== Order "Different parts" by first appearance (depth-first) =====
+            first_seen = {}
+            seq = 0
+
+            def record_part(pn: str):
+                nonlocal seq
+                if pn not in first_seen:
+                    first_seen[pn] = seq
+                    seq += 1
+
+            def dfs_from_item(parent_item: str):
+                children = get_direct_children(df, parent_item)
+                for _, crow in children.iterrows():
+                    t = str(crow["Type"]).lower()
+                    if t == "part":
+                        record_part(crow["Part Number"])
+                    elif t == "assembly":
+                        dfs_from_item(str(crow["Item"]))
+
+            # Traverse top-level rows (in natural order)
+            for _, prow in df_parents.iterrows():
+                t = str(prow["Type"]).lower()
+                if t == "part":
+                    record_part(prow["Part Number"])
+                elif t == "assembly":
+                    dfs_from_item(str(prow["Item"]))
+
+            # Best available metadata per PN
+            meta_parts = parts_only[["Part Number", "Revision", "Product Description"]].copy()
             meta_parts["_desc_ok"] = meta_parts["Product Description"].str.strip().ne("")
             meta_parts["_rev_ok"] = meta_parts["Revision"].str.strip().ne("")
-            # Sort to prefer rows with non-empty description, then non-empty revision
             meta_parts.sort_values(by=["_desc_ok", "_rev_ok"], ascending=[False, False], inplace=True)
             meta = meta_parts.groupby("Part Number", as_index=False).first()[["Part Number", "Revision", "Product Description"]]
 
-            parts_list = pd.DataFrame(
-                [{"Part Number": pn, "Quantity": int(round(qty))} for pn, qty in per_pn_qty.items()]
-            )
-            pd.DataFrame([["Different parts (exploded quantities)"]]).to_excel(
-                writer, index=False, header=False, startrow=r
-            ); r += 2
+            # Prepare list in encounter order
+            rows = []
+            for pn, qty in per_pn_qty.items():
+                rows.append({
+                    "Part Number": pn,
+                    "Quantity": int(round(qty)),
+                    "_order": first_seen.get(pn, 10**9),
+                })
+            parts_list = pd.DataFrame(rows)
 
-            if parts_list.empty:
-                pd.DataFrame([["(no parts found)"]]).to_excel(writer, index=False, header=False, startrow=r)
-                r += 2
-            else:
-                # Ensure same dtype/format for merge keys
-                parts_list["Part Number"] = parts_list["Part Number"].map(normalize_str)
-                meta["Part Number"] = meta["Part Number"].map(normalize_str)
-
+            if not parts_list.empty:
                 parts_list = parts_list.merge(meta, on="Part Number", how="left")
-                parts_list = parts_list[["Quantity", "Part Number", "Revision", "Product Description"]]
-                parts_list.sort_values(by="Part Number", inplace=True, key=lambda c: c.astype(str))
+                parts_list.sort_values(by=["_order"], inplace=True)
+                parts_list.drop(columns=["_order"], inplace=True)
 
+                # Columns exactly as requested (no trailing numbering column)
+                parts_list = parts_list[["Quantity", "Part Number", "Revision", "Product Description"]]
+
+                # Write the table directly under Recapitulation counts
                 parts_list.to_excel(writer, index=False, startrow=r)
                 r += len(parts_list) + 3
+            else:
+                pd.DataFrame([["(no parts found)"]]).to_excel(writer, index=False, header=False, startrow=r)
+                r += 2
 
         messagebox.showinfo("Success", f"File saved (overwritten if existed):\n{out_path}")
 
@@ -250,7 +290,7 @@ def process_file():
 # --- Tkinter GUI ---
 root = tk.Tk()
 root.title("Structured Excel Processor")
-root.geometry("600x420")
+root.geometry("640x440")
 
 tk.Label(root, text="Upload '10011 structured.xlsx' to generate 'output/10011.xlsx'").pack(pady=10)
 tk.Button(root, text="Upload Structured File", command=upload_structured).pack(pady=5)
