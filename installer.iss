@@ -2,7 +2,7 @@
 
 [Setup]
 AppName=Parts Master
-AppVersion=0.0.4
+AppVersion=0.0.5
 AppPublisher=In.Sist d.o.o.
 DefaultDirName={pf}\Parts Master
 DefaultGroupName=Parts Master

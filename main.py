@@ -128,7 +128,7 @@ def download_and_install(download_url):
     except Exception as e:
         messagebox.showerror("Update Failed", str(e))
 
-        
+
 def upload_structured():
     global structured_path, forklift_number
     t = translations[current_lang.get()]
@@ -245,8 +245,8 @@ normal_font = font.Font(family="Segoe UI", size=11)
 lang_frame = tk.Frame(root, bg="#f5f5f5")
 lang_frame.pack(side="top", pady=10)
 
-flag_en = PhotoImage(file=resource_path("assets/en.png")).subsample(18, 18)
-flag_hr = PhotoImage(file=resource_path("assets/hr.png")).subsample(18, 18)
+flag_en = PhotoImage(file=resource_path("assets/en.png")).subsample(20, 20)
+flag_hr = PhotoImage(file=resource_path("assets/hr.png")).subsample(20, 20)
 
 btn_en = tk.Button(
     lang_frame, image=flag_en,
