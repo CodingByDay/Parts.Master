@@ -1,8 +1,8 @@
-; Inno Setup script for Parts Master
+; Inno Setup script for PartsMaster
 
 [Setup]
 AppName=Parts Master
-AppVersion=0.0.3
+AppVersion=0.0.2
 AppPublisher=In.Sist d.o.o.
 DefaultDirName={pf}\Parts Master
 DefaultGroupName=Parts Master
@@ -10,23 +10,19 @@ OutputDir=dist
 OutputBaseFilename=PartsMasterInstaller
 Compression=lzma
 SolidCompression=yes
-
-; Optional: create desktop and start menu shortcuts
 SetupIconFile=assets\official-logo.ico
 
 [Files]
-; Main executable
-Source: "dist\Parts Master.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Main executable (renamed without space)
+Source: "dist\PartsMaster.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; Include assets folder
-Source: "assets\*"; DestDir: "{app}\assets"; Flags: recursesubdirs createallsubdirs ignoreversion
-
-; Include app_info.json
-Source: "app_info.json"; DestDir: "{app}"; Flags: ignoreversion
+; (Optional) external assets (only if you didn’t bundle with PyInstaller)
+; Source: "assets\*"; DestDir: "{app}\assets"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Source: "app_info.json"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Parts Master"; Filename: "{app}\Parts Master.exe"
-Name: "{commondesktop}\Parts Master"; Filename: "{app}\Parts Master.exe"
+Name: "{group}\Parts Master"; Filename: "{app}\PartsMaster.exe"
+Name: "{commondesktop}\Parts Master"; Filename: "{app}\PartsMaster.exe"
 
 [Run]
-Filename: "{app}\Parts Master.exe"; Description: "Launch Parts Master"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\PartsMaster.exe"; Description: "Launch Parts Master"; Flags: nowait postinstall skipifsilent

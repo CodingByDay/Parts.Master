@@ -8,6 +8,7 @@ import platform
 import json
 import requests, subprocess, time, sys
 from packaging import version
+import tempfile
 
 structured_path = None
 forklift_number = None  # user-entered value
@@ -102,8 +103,11 @@ def check_for_updates():
 
 
 def download_and_install(download_url):
-    local_filename = os.path.basename(download_url)
     try:
+        # Save to Windows temp folder
+        temp_dir = tempfile.gettempdir()
+        local_filename = os.path.join(temp_dir, os.path.basename(download_url))
+
         with requests.get(download_url, stream=True, timeout=30) as r:
             r.raise_for_status()
             with open(local_filename, "wb") as f:
@@ -111,9 +115,10 @@ def download_and_install(download_url):
                     if chunk:
                         f.write(chunk)
 
-        messagebox.showinfo("Update", f"Downloaded {local_filename}. Starting installer…")
+        # Notify user and run installer
+        messagebox.showinfo("Update", "Installer downloaded. It will now run.")
         subprocess.Popen([local_filename], shell=True)
-        os._exit(0)
+        os._exit(0)  # exit app before installer runs
     except Exception as e:
         messagebox.showerror("Update Failed", str(e))
 
