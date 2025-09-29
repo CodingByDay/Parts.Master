@@ -75,15 +75,61 @@ except Exception:
 def upload_structured():
     global structured_path, forklift_number
     structured_path = filedialog.askopenfilename(
-        title="Select 10011 structured.xlsx",
+        title="Select structured source file",
         filetypes=[("Excel files", "*.xlsx *.xls")]
     )
     if structured_path:
         file_label.config(text=os.path.basename(structured_path))
-        # Prompt user for Forklift number (English)
-        forklift_number = simpledialog.askstring("Input", "Enter Forklift number:")
-        if not forklift_number:
-            forklift_number = "Unknown"
+        # Use custom dialog with same app icon
+        forklift_number = ask_forklift_number(root, "assets/official-logo.ico")
+
+
+def ask_forklift_number(parent, app_icon=None):
+    dialog = tk.Toplevel(parent)
+    dialog.title("Forklift Number")
+    dialog.geometry("400x180")  # make it bigger
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    # --- set same icon ---
+    if app_icon:
+        try:
+            dialog.iconbitmap(app_icon)  # ICO on Windows
+        except Exception:
+            try:
+                dialog.iconphoto(False, PhotoImage(file=app_icon))  # PNG fallback
+            except Exception:
+                pass
+
+    # --- center relative to parent ---
+    parent.update_idletasks()
+    pw, ph = parent.winfo_width(), parent.winfo_height()
+    px, py = parent.winfo_rootx(), parent.winfo_rooty()
+    w, h = 400, 180
+    x = px + (pw - w) // 2
+    y = py + (ph - h) // 2
+    dialog.geometry(f"{w}x{h}+{x}+{y}")
+
+    tk.Label(dialog, text="Enter Forklift number:", font=("Segoe UI", 11)).pack(pady=15)
+
+    entry = tk.Entry(dialog, font=("Segoe UI", 12))
+    entry.pack(pady=5)
+    entry.focus()
+
+    value = {"result": None}
+
+    def submit():
+        value["result"] = entry.get().strip()
+        dialog.destroy()
+
+    tk.Button(
+        dialog, text="OK", command=submit,
+        bg="#2196F3", fg="white", padx=15, pady=5, cursor="hand2"
+
+    ).pack(pady=15)
+
+    parent.wait_window(dialog)
+    return value["result"] or "Unknown"
 
 
 def item_key(s: str):
@@ -423,7 +469,7 @@ file_label.pack(pady=5)
 # Generate button
 generate_btn = tk.Button(
     center_frame,
-    text="⚙️ Generate 10011.xlsx",
+    text="⚙️ Generate output file",
     command=process_file,
     font=normal_font,
     bg="#2196F3",
