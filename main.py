@@ -188,6 +188,15 @@ def update_lang_buttons():
     else:
         btn_hr.config(relief="solid", bd=2, bg="#e8f0ff", activebackground="#e8f0ff")
 
+def show_about():
+    t = translations[current_lang.get()]
+    messagebox.showinfo(
+        t["about"],
+        f"{APP_NAME}\n"
+        f"Version {APP_VERSION} ({APP_DATE})\n"
+        f"Created by {APP_AUTHOR}\n\n"
+        f"Notes:\n{APP_NOTES}"
+    )
 
 # --- Load info from JSON ---
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -208,7 +217,6 @@ except Exception:
     APP_DATE = ""
     APP_NOTES = ""
 
-
 # --- Tkinter GUI ---
 root = tk.Tk()
 root.title(f"{APP_NAME}")
@@ -226,8 +234,8 @@ normal_font = font.Font(family="Segoe UI", size=11)
 lang_frame = tk.Frame(root, bg="#f5f5f5")
 lang_frame.pack(side="top", pady=10)
 
-flag_en = PhotoImage(file=resource_path("assets/en.png")).subsample(15, 15)
-flag_hr = PhotoImage(file=resource_path("assets/hr.png")).subsample(15, 15)
+flag_en = PhotoImage(file=resource_path("assets/en.png")).subsample(18, 18)
+flag_hr = PhotoImage(file=resource_path("assets/hr.png")).subsample(18, 18)
 
 btn_en = tk.Button(
     lang_frame, image=flag_en,
@@ -285,9 +293,18 @@ footer_frame.pack(side="bottom", fill="x", pady=5)
 footer_label = tk.Label(footer_frame, fg="gray", bg="#f5f5f5", font=("Segoe UI", 9))
 footer_label.pack(side="left", padx=10)
 
-about_btn = tk.Button(footer_frame, command=lambda: None,
-                      font=("Segoe UI", 9), bg="#e0e0e0", fg="black",
-                      relief="flat", padx=10, pady=2, cursor="hand2")
+about_btn = tk.Button(
+    footer_frame,
+    text="About",
+    command=show_about,   # 👈 now it calls the function
+    font=("Segoe UI", 9),
+    bg="#e0e0e0",
+    fg="black",
+    relief="flat",
+    padx=10,
+    pady=2,
+    cursor="hand2"
+)
 about_btn.pack(side="right", padx=10)
 
 # --- Icon ---
