@@ -2,4 +2,3 @@ tk
 pandas
 openpyxl
 xlrd
-pyupdater
