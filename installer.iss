@@ -2,7 +2,7 @@
 
 [Setup]
 AppName=Parts Master
-AppVersion=0.0.2
+AppVersion=0.0.4
 AppPublisher=In.Sist d.o.o.
 DefaultDirName={pf}\Parts Master
 DefaultGroupName=Parts Master
@@ -10,7 +10,7 @@ OutputDir=dist
 OutputBaseFilename=PartsMasterInstaller
 Compression=lzma
 SolidCompression=yes
-SetupIconFile=assets\official-logo.ico
+SetupIconFile=assets\favicon.ico
 
 [Files]
 ; Main executable (renamed without space)
