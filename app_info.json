@@ -1,0 +1,7 @@
+{
+  "app_name": "Structured Excel Processor",
+  "version": "0.0.1",
+  "author": "In.Sist d.o.o.",
+  "release_date": "2025-09-29",
+  "notes": "Initial release with Excel processing and BOM generation features."
+}

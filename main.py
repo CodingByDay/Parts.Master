@@ -1,9 +1,10 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, PhotoImage
 import pandas as pd
 import os
 from datetime import datetime
 import locale
+import platform
 
 structured_path = None
 
@@ -286,15 +287,24 @@ def process_file():
     except Exception as e:
         messagebox.showerror("Error", f"Processing failed:\n{e}")
 
-
 # --- Tkinter GUI ---
 root = tk.Tk()
-root.title("Structured Excel Processor")
+root.title("Metal Product Parts Wizzard")
 root.geometry("640x440")
 
 tk.Label(root, text="Upload '10011 structured.xlsx' to generate 'output/10011.xlsx'").pack(pady=10)
 tk.Button(root, text="Upload Structured File", command=upload_structured).pack(pady=5)
 file_label = tk.Label(root, text="No file selected", fg="gray"); file_label.pack()
 tk.Button(root, text="Generate 10011.xlsx", command=process_file, bg="green", fg="white").pack(pady=20)
+
+system = platform.system()
+
+if system == "Windows":
+    try:
+        root.iconbitmap("assets/official-logo.ico")
+    except Exception:
+        root.iconphoto(False, PhotoImage(file="assets/official-logo.png"))
+else:
+    root.iconphoto(False, PhotoImage(file="assets/official-logo.png"))
 
 root.mainloop()
