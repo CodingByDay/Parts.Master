@@ -13,6 +13,9 @@ import tempfile
 structured_path = None
 forklift_number = None  # user-entered value
 
+
+# 29.09.2025 Janko Jovičić
+
 # --- Updater settings ---
 UPDATE_URL = "https://codingbyday.github.io/Parts.Master/latest.json"
 

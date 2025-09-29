@@ -2,7 +2,7 @@
 
 [Setup]
 AppName=Parts Master
-AppVersion=0.0.5
+AppVersion=0.0.6
 AppPublisher=In.Sist d.o.o.
 DefaultDirName={pf}\Parts Master
 DefaultGroupName=Parts Master
@@ -30,6 +30,3 @@ Name: "{group}\Parts Master"; Filename: "{app}\PartsMaster.exe"
 ; Desktop shortcut
 Name: "{commondesktop}\Parts Master"; Filename: "{app}\PartsMaster.exe"
 
-[Run]
-; Run app automatically after install
-Filename: "{app}\PartsMaster.exe"; Description: "Launch Parts Master"; Flags: nowait postinstall skipifsilent
