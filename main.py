@@ -1,10 +1,11 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, PhotoImage
+from tkinter import filedialog, messagebox, PhotoImage, font
 import pandas as pd
 import os
 from datetime import datetime
 import locale
 import platform
+import json
 
 structured_path = None
 
@@ -174,14 +175,11 @@ def process_file():
                 level = next_level
 
             # ===== Recapitulation & exploded counts =====
-            # Different parts = unique PN among PART rows
             parts_only = df[df["Type"].str.lower() == "part"].copy()
             different_parts = int(parts_only["Part Number"].nunique())
 
-            # Quantities per Item
             qty_by_item = df.groupby("Item")["Quantity"].sum().to_dict()
 
-            # Identify parent vs leaf items
             items_list = df["Item"].dropna().astype(str).tolist()
             is_parent_map = {
                 itm: any(other.startswith(itm + ".") for other in items_list if other != itm)
@@ -189,14 +187,12 @@ def process_file():
             }
             leaf_mask = df["Item"].map(lambda x: not is_parent_map.get(x, False))
 
-            # Leaf PART rows only
             leaf_parts = df[leaf_mask & (df["Type"].str.lower() == "part")].copy()
 
             def ancestors(itm: str):
                 segs = itm.split(".")
                 return [".".join(segs[:i]) for i in range(len(segs)-1, 0, -1)]
 
-            # Exploded total & per-PN aggregations
             exploded_total = 0.0
             per_pn_qty = {}
 
@@ -213,7 +209,6 @@ def process_file():
 
             total_parts = int(round(exploded_total))
 
-            # ==== Recapitulation header ====
             r += 1
             pd.DataFrame([[f"Recapitulation of: {bom_title}"]]).to_excel(
                 writer, index=False, header=False, startrow=r
@@ -223,7 +218,6 @@ def process_file():
                 ["Total parts:", total_parts],
             ]).to_excel(writer, index=False, header=False, startrow=r); r += 3
 
-            # ===== Order "Different parts" by first appearance (depth-first) =====
             first_seen = {}
             seq = 0
 
@@ -242,7 +236,6 @@ def process_file():
                     elif t == "assembly":
                         dfs_from_item(str(crow["Item"]))
 
-            # Traverse top-level rows (in natural order)
             for _, prow in df_parents.iterrows():
                 t = str(prow["Type"]).lower()
                 if t == "part":
@@ -250,14 +243,12 @@ def process_file():
                 elif t == "assembly":
                     dfs_from_item(str(prow["Item"]))
 
-            # Best available metadata per PN
             meta_parts = parts_only[["Part Number", "Revision", "Product Description"]].copy()
             meta_parts["_desc_ok"] = meta_parts["Product Description"].str.strip().ne("")
             meta_parts["_rev_ok"] = meta_parts["Revision"].str.strip().ne("")
             meta_parts.sort_values(by=["_desc_ok", "_rev_ok"], ascending=[False, False], inplace=True)
             meta = meta_parts.groupby("Part Number", as_index=False).first()[["Part Number", "Revision", "Product Description"]]
 
-            # Prepare list in encounter order
             rows = []
             for pn, qty in per_pn_qty.items():
                 rows.append({
@@ -272,10 +263,7 @@ def process_file():
                 parts_list.sort_values(by=["_order"], inplace=True)
                 parts_list.drop(columns=["_order"], inplace=True)
 
-                # Columns exactly as requested (no trailing numbering column)
                 parts_list = parts_list[["Quantity", "Part Number", "Revision", "Product Description"]]
-
-                # Write the table directly under Recapitulation counts
                 parts_list.to_excel(writer, index=False, startrow=r)
                 r += len(parts_list) + 3
             else:
@@ -287,18 +275,128 @@ def process_file():
     except Exception as e:
         messagebox.showerror("Error", f"Processing failed:\n{e}")
 
+
+# --- Load info from JSON ---
+base_dir = os.path.dirname(os.path.abspath(__file__))
+info_path = os.path.join(base_dir, "app_info.json")
+
+try:
+    with open(info_path, "r", encoding="utf-8") as f:
+        app_info = json.load(f)
+    APP_NAME = app_info.get("app_name", "My App")
+    APP_VERSION = app_info.get("version", "0.0.0")
+    APP_AUTHOR = app_info.get("author", "Unknown")
+    APP_DATE = app_info.get("release_date", "")
+    APP_NOTES = app_info.get("notes", "")
+except Exception:
+    APP_NAME = "My App"
+    APP_VERSION = "0.0.0"
+    APP_AUTHOR = "Unknown"
+    APP_DATE = ""
+    APP_NOTES = ""
+
+
 # --- Tkinter GUI ---
 root = tk.Tk()
-root.title("Metal Product Parts Wizzard")
-root.geometry("640x440")
+root.title(f"{APP_NAME} v{APP_VERSION}")
+root.geometry("700x500")
+root.configure(bg="#f5f5f5")
 
-tk.Label(root, text="Upload '10011 structured.xlsx' to generate 'output/10011.xlsx'").pack(pady=10)
-tk.Button(root, text="Upload Structured File", command=upload_structured).pack(pady=5)
-file_label = tk.Label(root, text="No file selected", fg="gray"); file_label.pack()
-tk.Button(root, text="Generate 10011.xlsx", command=process_file, bg="green", fg="white").pack(pady=20)
+# Fonts
+title_font = font.Font(family="Segoe UI", size=14, weight="bold")
+normal_font = font.Font(family="Segoe UI", size=11)
 
+# --- Center frame with card style ---
+center_frame = tk.Frame(root, bg="white", padx=40, pady=30, relief="flat", bd=1)
+center_frame.place(relx=0.5, rely=0.5, anchor="center")
+
+# Title label
+title_label = tk.Label(
+    center_frame,
+    text="Upload structured file to generate the result",
+    font=title_font,
+    bg="white",
+    wraplength=500,
+    justify="center"
+)
+title_label.pack(pady=(0, 20))
+
+# Upload button
+upload_btn = tk.Button(
+    center_frame,
+    text="📂 Upload Structured File",
+    command=upload_structured,
+    font=normal_font,
+    bg="#4CAF50",
+    fg="white",
+    activebackground="#45a049",
+    activeforeground="white",
+    padx=15,
+    pady=8,
+    relief="flat",
+    cursor="hand2"   # 👈 makes cursor a pointing hand
+)
+upload_btn.pack(pady=8, fill="x")
+
+# File label
+file_label = tk.Label(center_frame, text="No file selected", fg="gray", font=normal_font, bg="white")
+file_label.pack(pady=5)
+
+# Generate button
+generate_btn = tk.Button(
+    center_frame,
+    text="⚙️ Generate 10011.xlsx",
+    command=process_file,
+    font=normal_font,
+    bg="#2196F3",
+    fg="white",
+    activebackground="#1976D2",
+    activeforeground="white",
+    padx=15,
+    pady=8,
+    relief="flat",
+    cursor="hand2"   # 👈 makes cursor a pointing hand
+)
+generate_btn.pack(pady=12, fill="x")
+
+# --- Footer ---
+footer_frame = tk.Frame(root, bg="#f5f5f5")
+footer_frame.pack(side="bottom", fill="x", pady=5)
+
+footer_label = tk.Label(
+    footer_frame,
+    text=f"Version {APP_VERSION} | Created by {APP_AUTHOR}",
+    fg="gray",
+    bg="#f5f5f5",
+    font=("Segoe UI", 9)
+)
+footer_label.pack(side="left", padx=10)
+
+def show_about():
+    messagebox.showinfo(
+        "About",
+        f"{APP_NAME}\n"
+        f"Version {APP_VERSION} ({APP_DATE})\n"
+        f"Created by {APP_AUTHOR}\n\n"
+        f"Notes:\n{APP_NOTES}"
+    )
+
+about_btn = tk.Button(
+    footer_frame,
+    text="About",
+    command=show_about,
+    font=("Segoe UI", 9),
+    bg="#e0e0e0",
+    fg="black",
+    relief="flat",
+    padx=10,
+    pady=2,
+    cursor="hand2"   # 👈 makes cursor a pointing hand
+)
+about_btn.pack(side="right", padx=10)
+
+# --- Icon handling ---
 system = platform.system()
-
 if system == "Windows":
     try:
         root.iconbitmap("assets/official-logo.ico")

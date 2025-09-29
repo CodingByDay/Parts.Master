@@ -2,3 +2,5 @@ tk
 pandas
 openpyxl
 xlrd
+pyupdater
+json
