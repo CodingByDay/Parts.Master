@@ -115,14 +115,20 @@ def download_and_install(download_url):
                     if chunk:
                         f.write(chunk)
 
-        # Notify user and run installer
+        # Notify user
         messagebox.showinfo("Update", "Installer downloaded. It will now run.")
-        subprocess.Popen([local_filename], shell=True)
+
+        # 👉 Detect installer type
+        if local_filename.lower().endswith(".msi"):
+            subprocess.Popen(['msiexec', '/i', local_filename], shell=True)
+        else:
+            subprocess.Popen([local_filename], shell=True)
+
         os._exit(0)  # exit app before installer runs
     except Exception as e:
         messagebox.showerror("Update Failed", str(e))
 
-
+        
 def upload_structured():
     global structured_path, forklift_number
     t = translations[current_lang.get()]
