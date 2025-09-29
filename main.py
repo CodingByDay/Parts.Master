@@ -211,7 +211,7 @@ except Exception:
 
 # --- Tkinter GUI ---
 root = tk.Tk()
-root.title(f"{APP_NAME} v{APP_VERSION}")
+root.title(f"{APP_NAME}")
 root.geometry("700x500")
 root.configure(bg="#f5f5f5")
 # Prevent window from being resized smaller than the default
