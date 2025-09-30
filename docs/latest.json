@@ -1,5 +1,5 @@
 {
-  "version": "0.0.7",
-  "url": "https://github.com/CodingByDay/Parts.Master/releases/download/0.0.7/PartsMasterInstaller.exe",
-  "notes": "New features: faster Excel processing, UI improvements."
+  "version": "0.0.8",
+  "url": "https://github.com/CodingByDay/Parts.Master/releases/download/0.0.8/PartsMasterInstaller.exe",
+  "notes": "Design changes according to client testing."
 }
