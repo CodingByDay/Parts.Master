@@ -1,7 +1,7 @@
 {
   "app_name": "Metal Product Parts Master",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "author": "In.Sist d.o.o.",
   "release_date": "2025-09-29",
-  "notes": "Changes to the design and testing of the application."
+  "notes": "Fixed BOM issue, tested order and updating logic, first production version."
 }

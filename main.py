@@ -11,7 +11,7 @@ from packaging import version
 import tempfile
 
 # ------------------------------
-# Global state
+# Global state 29.09.2025 Janko Jovičić
 # ------------------------------
 structured_path = None
 forklift_number = None  # user-entered value
