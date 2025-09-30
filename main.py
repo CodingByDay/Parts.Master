@@ -375,7 +375,7 @@ def process_file():
         if not df_parents.empty:
             df_parents.sort_values(by="Item", key=lambda c: c.map(item_key), inplace=True)
 
-        # Write file using xlsxwriter (to avoid number stored as text warnings)
+        # Write file using xlsxwriter (no “number stored as text” warning)
         with pd.ExcelWriter(
             out_path,
             engine="xlsxwriter",
@@ -383,18 +383,18 @@ def process_file():
         ) as writer:
             r = 0
 
-            # Date header
+            # Date
             now = datetime.now()
             cro_dt = now.strftime("%d. %B %Y. %H:%M:%S")
             pd.DataFrame([[cro_dt]]).to_excel(writer, index=False, header=False, startrow=r); r += 2
 
-            # Bill of Material + forklift
+            # BOM title (with forklift if available)
             title_value = forklift_number if forklift_number else best_title_from_filename(structured_path)
             pd.DataFrame([[f"Bill of Material: {title_value}"]]).to_excel(
                 writer, index=False, header=False, startrow=r
-            ); r += 1   # 👈 only +1 (no empty row)
+            ); r += 1
 
-            # Main parent table
+            # Parent table
             if not df_parents.empty:
                 df_parents[req_cols].to_excel(writer, index=False, startrow=r)
                 r += len(df_parents) + 2
@@ -414,7 +414,7 @@ def process_file():
                     children = get_direct_children(df, parent_item)
                     pd.DataFrame([[f"Bill of Material: {pn}"]]).to_excel(
                         writer, index=False, header=False, startrow=r
-                    ); r += 1  # 👈 only +1
+                    ); r += 1
                     if not children.empty:
                         children[req_cols].to_excel(writer, index=False, startrow=r)
                         r += len(children) + 2
@@ -467,7 +467,7 @@ def process_file():
             pd.DataFrame([
                 ["Different parts:", different_parts],
                 ["Total parts:", total_parts],
-            ]).to_excel(writer, index=False, header=False, startrow=r); r += 2
+            ]).to_excel(writer, index=False, header=False, startrow=r); r += 3  # 👈 add spacing row here
 
             # Order & metadata
             first_seen = {}
@@ -515,7 +515,7 @@ def process_file():
             else:
                 pd.DataFrame([["(no parts found)"]]).to_excel(writer, index=False, header=False, startrow=r); r += 2
 
-        # === Remove ALL borders + bold everywhere ===
+        # === Post-formatting: remove borders + bold everywhere ===
         wb = load_workbook(out_path)
         ws = wb.active
         for row in ws.iter_rows():
@@ -523,13 +523,14 @@ def process_file():
                 if cell.value:
                     if str(cell.value).strip() in ["Quantity", "Part Number", "Type", "Nomenclature", "Revision", "Product Description"]:
                         cell.font = Font(bold=False)
-                cell.border = Border()  # no borders anywhere
+                cell.border = Border()
         wb.save(out_path)
 
         messagebox.showinfo(t["success"], t["success_msg"].format(path=out_path))
 
     except Exception as e:
         messagebox.showerror(t["error"], t["error_msg"].format(err=e))
+
 
 
 
