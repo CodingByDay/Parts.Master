@@ -345,6 +345,20 @@ def process_file():
     if not out_path:
         return
 
+    # --- Helper for cleaning columns ---
+    def clean_column_for_excel(series: pd.Series) -> pd.Series:
+        cleaned = []
+        for val in series:
+            if pd.isna(val):
+                cleaned.append("")
+                continue
+            s = str(val).strip()
+            if s.isdigit():   # ✅ pure digits → convert to int
+                cleaned.append(int(s))
+            else:             # ✅ keep as string (preserve underscores etc.)
+                cleaned.append(s)
+        return pd.Series(cleaned, index=series.index)
+
     try:
         # Load and normalize
         df = pd.read_excel(structured_path, dtype={"Item": str})
@@ -367,20 +381,24 @@ def process_file():
 
         df["Quantity"] = pd.to_numeric(df["Quantity"], errors="coerce").fillna(0)
         df["Type"] = df["Type"].astype(str).str.strip()
+
+        # Normalize
         df["Part Number"] = df["Part Number"].map(normalize_str)
         df["Revision"] = df["Revision"].map(fmt_revision)
         df["Product Description"] = df["Product Description"].map(normalize_str)
 
+        # ✅ Clean key columns for Excel warnings
+        df["Part Number"] = clean_column_for_excel(df["Part Number"])
+        df["Nomenclature"] = clean_column_for_excel(df["Nomenclature"])
+        df["Revision"] = clean_column_for_excel(df["Revision"])
+
+        # Top-level rows (Item with no dot)
         df_parents = df[df["Item"].str.match(r"^\d+$")].copy()
         if not df_parents.empty:
             df_parents.sort_values(by="Item", key=lambda c: c.map(item_key), inplace=True)
 
-        # Write file using xlsxwriter (no “number stored as text” warning)
-        with pd.ExcelWriter(
-            out_path,
-            engine="xlsxwriter",
-            engine_kwargs={'options': {'strings_to_numbers': True}}
-        ) as writer:
+        # Write file using xlsxwriter
+        with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
             r = 0
 
             # Date
@@ -388,7 +406,7 @@ def process_file():
             cro_dt = now.strftime("%d. %B %Y. %H:%M:%S")
             pd.DataFrame([[cro_dt]]).to_excel(writer, index=False, header=False, startrow=r); r += 2
 
-            # BOM title (with forklift if available)
+            # BOM title
             title_value = forklift_number if forklift_number else best_title_from_filename(structured_path)
             pd.DataFrame([[f"Bill of Material: {title_value}"]]).to_excel(
                 writer, index=False, header=False, startrow=r
@@ -467,7 +485,7 @@ def process_file():
             pd.DataFrame([
                 ["Different parts:", different_parts],
                 ["Total parts:", total_parts],
-            ]).to_excel(writer, index=False, header=False, startrow=r); r += 3  # 👈 add spacing row here
+            ]).to_excel(writer, index=False, header=False, startrow=r); r += 3
 
             # Order & metadata
             first_seen = {}
@@ -491,8 +509,9 @@ def process_file():
                     dfs_from_item(str(prow["Item"]))
 
             meta_parts = parts_only[["Part Number", "Revision", "Product Description"]].copy()
-            meta_parts["_desc_ok"] = meta_parts["Product Description"].str.strip().ne("")
-            meta_parts["_rev_ok"] = meta_parts["Revision"].str.strip().ne("")
+            # ✅ Cast to str before calling .str
+            meta_parts["_desc_ok"] = meta_parts["Product Description"].astype(str).str.strip().ne("")
+            meta_parts["_rev_ok"] = meta_parts["Revision"].astype(str).str.strip().ne("")
             meta_parts.sort_values(by=["_desc_ok", "_rev_ok"], ascending=[False, False], inplace=True)
             meta = meta_parts.groupby("Part Number", as_index=False).first()[["Part Number", "Revision", "Product Description"]]
 
@@ -515,7 +534,7 @@ def process_file():
             else:
                 pd.DataFrame([["(no parts found)"]]).to_excel(writer, index=False, header=False, startrow=r); r += 2
 
-        # === Post-formatting: remove borders + bold everywhere ===
+        # === Post-formatting: remove borders + bold on headers ===
         wb = load_workbook(out_path)
         ws = wb.active
         for row in ws.iter_rows():
@@ -530,10 +549,6 @@ def process_file():
 
     except Exception as e:
         messagebox.showerror(t["error"], t["error_msg"].format(err=e))
-
-
-
-
 
 
 # ------------------------------
